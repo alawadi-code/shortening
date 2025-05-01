@@ -39,70 +39,78 @@ namespace URLShortener.API.Controllers
 
             try
             {
-                // Check if URL already exists
+                // First, find any existing URL with the same original URL
                 var existingUrl = await _context.Urls.FirstOrDefaultAsync(u => u.OriginalUrl == request.OriginalUrl);
-                
-                if (existingUrl != null)
-                {
-                    // Always update the existing URL with new short URL
-                    string newShortUrl;
-                    if (!string.IsNullOrEmpty(request.CustomUrl))
-                    {
-                        // Check if the new custom URL is already taken by another URL
-                        var customUrlExists = await _context.Urls
-                            .AnyAsync(u => u.ShortUrl == request.CustomUrl && u.Id != existingUrl.Id);
-                        
-                        if (customUrlExists)
-                        {
-                            return BadRequest(new { message = "Custom URL already exists" });
-                        }
-                        newShortUrl = request.CustomUrl;
-                    }
-                    else
-                    {
-                        do
-                        {
-                            newShortUrl = GenerateRandomString(6);
-                        } while (await _context.Urls.AnyAsync(u => u.ShortUrl == newShortUrl));
-                    }
 
-                    existingUrl.ShortUrl = newShortUrl;
-                    existingUrl.IsCustom = !string.IsNullOrEmpty(request.CustomUrl);
-                    await _context.SaveChangesAsync();
-                    return Ok(new { shortUrl = existingUrl.ShortUrl, message = "URL updated successfully" });
-                }
-
-                // Generate a new URL entry
-                string shortUrl;
+                // If a custom URL is requested
                 if (!string.IsNullOrEmpty(request.CustomUrl))
                 {
-                    shortUrl = request.CustomUrl;
-                    if (await _context.Urls.AnyAsync(u => u.ShortUrl == shortUrl))
+                    // Find if the requested custom URL is used by another URL
+                    var customUrlEntry = await _context.Urls.FirstOrDefaultAsync(u => u.ShortUrl == request.CustomUrl);
+                    
+                    // If custom URL exists and is used by a different original URL
+                    if (customUrlEntry != null && customUrlEntry.OriginalUrl != request.OriginalUrl)
                     {
-                        return BadRequest(new { message = "Custom URL already exists" });
+                        return BadRequest(new { message = "Custom URL already exists and is used by another URL" });
                     }
+
+                    // If custom URL exists, delete it (whether it's for this URL or another)
+                    if (customUrlEntry != null)
+                    {
+                        _context.Urls.Remove(customUrlEntry);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    // If there was an existing URL with a different short URL, delete it
+                    if (existingUrl != null && existingUrl.ShortUrl != request.CustomUrl)
+                    {
+                        _context.Urls.Remove(existingUrl);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    // Create new entry with custom URL
+                    var newUrl = new UrlModel
+                    {
+                        OriginalUrl = request.OriginalUrl,
+                        ShortUrl = request.CustomUrl,
+                        CreatedAt = DateTime.UtcNow,
+                        ClickCount = 0,
+                        IsCustom = true
+                    };
+
+                    _context.Urls.Add(newUrl);
+                    await _context.SaveChangesAsync();
+                    return Ok(new { shortUrl = newUrl.ShortUrl, message = "Custom URL created successfully" });
                 }
                 else
                 {
+                    // If no custom URL requested but URL exists, generate new random URL
+                    if (existingUrl != null)
+                    {
+                        _context.Urls.Remove(existingUrl);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    // Generate new random short URL
+                    string shortUrl;
                     do
                     {
                         shortUrl = GenerateRandomString(6);
                     } while (await _context.Urls.AnyAsync(u => u.ShortUrl == shortUrl));
+
+                    var url = new UrlModel
+                    {
+                        OriginalUrl = request.OriginalUrl,
+                        ShortUrl = shortUrl,
+                        CreatedAt = DateTime.UtcNow,
+                        ClickCount = 0,
+                        IsCustom = false
+                    };
+
+                    _context.Urls.Add(url);
+                    await _context.SaveChangesAsync();
+                    return Ok(new { shortUrl = url.ShortUrl, message = "URL created successfully with random short URL" });
                 }
-
-                var url = new UrlModel
-                {
-                    OriginalUrl = request.OriginalUrl,
-                    ShortUrl = shortUrl,
-                    CreatedAt = DateTime.UtcNow,
-                    ClickCount = 0,
-                    IsCustom = !string.IsNullOrEmpty(request.CustomUrl)
-                };
-
-                _context.Urls.Add(url);
-                await _context.SaveChangesAsync();
-
-                return Ok(new { shortUrl = url.ShortUrl, message = "URL created successfully" });
             }
             catch (Exception ex)
             {

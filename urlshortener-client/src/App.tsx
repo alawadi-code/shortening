@@ -76,10 +76,6 @@ function App() {
               className="custom-url-input"
             />
           </div>
-          <p className="help-text">
-            Note: When you enter a URL that already exists, a new short URL will be generated 
-            or your custom URL will be applied if provided.
-          </p>
           <button type="submit">Shorten URL</button>
         </form>
         {error && <div className="error-message">{error}</div>}
