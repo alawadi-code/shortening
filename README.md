@@ -36,4 +36,14 @@ dotnet ef database update
 
 # Reset database
 dotnet ef database drop -f --context UrlContext
-``` 
+```
+run 
+cd URLShortener.API;
+
+cd URLShortener.API; dotnet clean; dotnet restore; dotnet ef database update; dotnet run
+ clint do
+
+
+ cd urlshortener-client;
+
+ cd urlshortener-client; npm install; npm start
